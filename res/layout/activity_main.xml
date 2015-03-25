@@ -1,0 +1,79 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+			  xmlns:tools="http://schemas.android.com/tools"
+			  android:layout_width="match_parent"
+			  android:layout_height="match_parent"
+			  android:orientation="vertical"
+			  tools:context=".MainActivity">
+
+	<TableLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content">
+
+		<TableRow
+			android:padding="@dimen/margin_less">
+
+			<TextView
+				android:layout_gravity="center"
+				android:text="@string/bluetooth_label"/>
+
+			<ImageButton
+				android:id="@+id/a_main_bluetooth_refresh_button"
+				android:layout_gravity="center"
+				android:background="?android:attr/selectableItemBackground"
+				android:contentDescription="@string/refresh_button_description"
+				android:padding="@dimen/margin"
+				android:src="@drawable/ic_refresh_dark"/>
+
+			<ImageButton
+				android:id="@+id/a_main_bluetooth_accept_button"
+				android:layout_gravity="center"
+				android:background="?android:attr/selectableItemBackground"
+				android:contentDescription="@string/refresh_button_description"
+				android:padding="@dimen/margin"
+				android:src="@drawable/ic_accept_dark"/>
+
+			<Spinner
+				android:id="@+id/a_main_bluetooth_spinner"
+				android:layout_gravity="center_vertical"
+				tools:listitem="@layout/list_item_spinner"/>
+
+		</TableRow>
+
+		<TableRow
+			android:padding="@dimen/margin_less">
+
+			<TextView
+				android:layout_gravity="center"
+				android:text="@string/wifi_p2p_label"/>
+
+			<ImageButton
+				android:id="@+id/a_main_wifi_refresh_button"
+				android:layout_gravity="center"
+				android:background="?android:attr/selectableItemBackground"
+				android:contentDescription="@string/refresh_button_description"
+				android:padding="@dimen/margin"
+				android:src="@drawable/ic_refresh_dark"/>
+
+			<ImageButton
+				android:id="@+id/a_main_wifi_accept_button"
+				android:layout_gravity="center"
+				android:background="?android:attr/selectableItemBackground"
+				android:contentDescription="@string/refresh_button_description"
+				android:padding="@dimen/margin"
+				android:src="@drawable/ic_accept_dark"/>
+
+			<Spinner
+				android:id="@+id/a_main_wifi_spinner"
+				android:layout_gravity="center_vertical"
+				tools:listitem="@layout/list_item_spinner"/>
+
+		</TableRow>
+
+	</TableLayout>
+
+	<FrameLayout
+		android:id="@+id/a_main_frame"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"/>
+
+</LinearLayout>
