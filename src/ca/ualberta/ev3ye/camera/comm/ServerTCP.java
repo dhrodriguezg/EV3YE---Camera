@@ -90,8 +90,8 @@ public class ServerTCP {
             public void run() {
             	try {
             		clientSocket = transferSocket.accept(); // This is blocking. It will wait.
-                    dataInput = new DataInputStream(clientSocket.getInputStream());
-                    dataOutput = new DataOutputStream(clientSocket.getOutputStream());
+            		dataOutput = new DataOutputStream(clientSocket.getOutputStream());
+            		dataInput = new DataInputStream(clientSocket.getInputStream());
         			clientSocket.setKeepAlive(true);
         			clientOnline = true;
             	} catch (IOException e) {

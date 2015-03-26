@@ -41,14 +41,13 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 
 import ca.ualberta.ev3ye.camera.R;
-import ca.ualberta.ev3ye.camera.comm.ClientTCP;
+import ca.ualberta.ev3ye.camera.comm.BluetoothCom;
 import ca.ualberta.ev3ye.camera.comm.ServerTCP;
 import ca.ualberta.ev3ye.camera.comm.WiFiP2PBroadcastReceiver;
 
 public class MainActivity extends Activity implements CvCameraViewListener2, OnTouchListener, WiFiP2PBroadcastReceiver.WiFiP2PBroadcastCallbacks {
 	
     private static final String    TAG = "MainActivity";
-
     private static final int       VIEW_MODE_RGBA     = 0;
     private static final int       VIEW_MODE_FEATURES = 1;
     
@@ -82,10 +81,13 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     private int xpoint;
 	private int ypoint;
 	
+	private static final boolean isWiFiDirect = false;
 	private WifiP2pManager mManager;
 	private Channel mChannel;
 	private BroadcastReceiver mReceiver;
-	protected IntentFilter mIntentFilter = null;
+	private IntentFilter mIntentFilter = null;
+	
+	private BluetoothCom btComm = null;
 
     @SuppressLint("ClickableViewAccessibility")
 	private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
@@ -121,26 +123,29 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if(isWiFiDirect){
+        	mManager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
+        	mChannel=mManager.initialize(this, getMainLooper(), null);
         
-        mManager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
-        mChannel=mManager.initialize(this, getMainLooper(), null);
+        	mManager.createGroup(mChannel, new WifiP2pManager.ActionListener() {
+        		@Override
+        		public void onSuccess() {
+        		}
+        		@Override
+        		public void onFailure(int reason) {				
+        		}
+        	});
         
-        mManager.createGroup(mChannel, new WifiP2pManager.ActionListener() {
-			@Override
-			public void onSuccess() {
-			}
-			@Override
-			public void onFailure(int reason) {				
-			}
-		});
+        	mReceiver = new WiFiP2PBroadcastReceiver(this);
+        	mIntentFilter = new IntentFilter();
+        	mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION );
+        	mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION );
+        	mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION );
+        	mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION );
+        }
         
-        mReceiver = new WiFiP2PBroadcastReceiver(this);
-        mIntentFilter = new IntentFilter();
-		mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION );
-		mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION );
-		mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION );
-		mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION );
-        
+        btComm = new BluetoothCom(); //TODO
+        btComm.searchForRobot();
 		serverTCP = new ServerTCP();
 		serverTCP.initGreeting();
 		serverTCP.initStreaming();
@@ -156,7 +161,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     public void onPause()
     {
         super.onPause();
-        unregisterReceiver( mReceiver );
+        if(isWiFiDirect)
+        	unregisterReceiver( mReceiver );
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
     }
@@ -165,15 +171,18 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     public void onResume()
     {
         super.onResume();
-        this.registerReceiver( mReceiver, mIntentFilter );
-        mManager.discoverPeers( mChannel, new WifiP2pManager.ActionListener() {
-            @Override
-            public void onSuccess() {
-            }
-            @Override
-            public void onFailure(int reasonCode) {
-            }
-        });
+        if(isWiFiDirect){
+        	this.registerReceiver( mReceiver, mIntentFilter );
+            mManager.discoverPeers( mChannel, new WifiP2pManager.ActionListener() {
+                @Override
+                public void onSuccess() {
+                }
+                @Override
+                public void onFailure(int reasonCode) {
+                }
+            });
+        }
+        
         
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_3, this, mLoaderCallback);
     }
@@ -303,9 +312,16 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         	Imgproc.cvtColor(imageRotMat, imageMat, Imgproc.COLOR_RGBA2BGR, 3);
             MatOfByte bufByte = new MatOfByte();
         	Highgui.imencode(".jpg", imageMat, bufByte, compression_params);
-        	serverTCP.updateStreaming(bufByte.toArray());
+        	boolean sent=serverTCP.updateStreaming(bufByte.toArray());
+        	if(!sent)
+        		Log.e(TAG, "Camera is skipping frame....");
         	porc = Integer.parseInt(serverTCP.getControls());
         }
+        
+        if(btComm.isSuccess()){
+        	btComm.sendCommands("1;50;-50;");
+        }
+        
         Core.rectangle(mRgba, new Point(x,0),new Point(x+width-1,mRgba.rows()-1), new Scalar(255,0,0,255));
         return mRgba;
     }
