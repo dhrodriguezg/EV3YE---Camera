@@ -146,12 +146,13 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         	mIntentFilter.addAction( WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION );
         }
         
-        btComm = new BluetoothCom(); //TODO
+        btComm = new BluetoothCom();
         btComm.startBT(this);
 		serverTCP = new ServerTCP();
 		serverTCP.initGreeting();
 		serverTCP.initStreaming();
-		
+		serverTCP.initController();
+		updateControls();
 		
         setContentView(R.layout.camera_view);
         mOpenCvCameraView = (CameraView) findViewById(R.id.tutorial2_activity_surface_view);
@@ -252,9 +253,9 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     public boolean onCreateOptionsMenu(Menu menu) {
     	Log.i(TAG, "called onCreateOptionsMenu");
     	
-    	mItemPreviewRGBA = menu.add("Normal View");
-        mItemPreviewFeatures = menu.add("View Features");
-        mItemStartStreaming = menu.add("Begin");
+    	mItemPreviewRGBA = menu.add("View");
+        mItemPreviewFeatures = menu.add("Features");
+        mItemStartStreaming = menu.add("EV3");
         
         //Resolution
         mResolutionMenu = menu.addSubMenu("Resolutions");
@@ -278,7 +279,6 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
             mViewMode = VIEW_MODE_FEATURES;
         } else if (item == mItemStartStreaming) {
         	btComm.searchForRobot();
-        	//clientTCP = new ClientTCP();
         }
         
         else if (item.getGroupId() == 1){//Change Resolution
@@ -323,12 +323,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         	Imgproc.cvtColor(imageRotMat, imageMat, Imgproc.COLOR_RGBA2BGR, 3);
             MatOfByte bufByte = new MatOfByte();
         	Highgui.imencode(".jpg", imageMat, bufByte, compression_params);
-        	boolean sent=serverTCP.updateStreaming(bufByte.toArray());
-        	porc = Integer.parseInt(serverTCP.getControls());
-        }
-        
-        if(btComm.isSuccess()){
-        	btComm.sendCommands("1;"+power+";"+(-power)+";");
+        	serverTCP.updateStreaming(bufByte.toArray());
         }
         
         Core.rectangle(mRgba, new Point(x,0),new Point(x+width-1,mRgba.rows()-1), new Scalar(255,0,0,255));
@@ -338,7 +333,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 
     public native void Unused(long matAddrGr, long matAddrRgba);
     
-    public void horribleResolutionFix() { //f***ng OpenCV doesn't let me change the initial resolution automatically...So I had to do it like this.
+    private void horribleResolutionFix() { //f***ng OpenCV doesn't let me change the initial resolution automatically...So I had to do it like this.
 		Thread thread = new Thread() {
 			public void run() {
 				while(!isRunning){
@@ -354,6 +349,51 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 		};
 		thread.start();
 	}
+    
+    private void updateControls(){
+    	final String TAG = "Control";
+    	Thread thread = new Thread() {
+			public void run() {
+				while(!serverTCP.isControllerOnline()){ //Waiting until controller connection is made
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				Log.i(TAG, "Controller connected");
+				while(serverTCP.isControllerOnline()){
+					
+					try {
+						Thread.sleep(10); //100FPS
+						Log.i(TAG, "Updating controller");
+						serverTCP.updateControls();
+						
+						while(!serverTCP.hasControlChanged()){//Wait until is has finished reading...
+							try {
+								Thread.sleep(1);
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						}
+						Log.i(TAG, "Controller updated");
+						if(serverTCP.hasControlChanged()){
+							//:operator;leftPower;rightPower;cameraHeight
+							String[] control = serverTCP.getControls().split(":");
+							String[] command = control[control.length-1].split(";");
+							porc = Integer.parseInt(command[3]);
+							if(!command[0].equals("4") && btComm.isSuccess()){ //Not visual servoing
+									btComm.sendCommands(control[control.length-1]);
+							}
+						}
+					} catch (Exception e) {
+						e.printStackTrace();
+					}	
+				}
+			}
+		};
+		thread.start();
+    }
     
     private void setNearestResolution(int width, int height){
     	mResolutionList = mOpenCvCameraView.getResolutionList();

@@ -35,7 +35,7 @@ public class ServerTCP {
     private boolean controllerOnline = false;
     
     private byte[] picture = null;
-    private String controls = "0";
+    private String controls = "";
     private boolean controlChanged = false;
     
 	public ServerTCP(){
@@ -120,14 +120,16 @@ public class ServerTCP {
 		Thread thread = new Thread() {
             public void run() {
             	try {
-            		clientControllerSocket = streamingSocket.accept(); // This is blocking. It will wait.
+            		Log.i("Control", "Waiting for controller");
+            		clientControllerSocket = controllerSocket.accept(); // This is blocking. It will wait.
             		dataControllerOutput = new DataOutputStream(clientControllerSocket.getOutputStream());
             		dataControllerInput = new DataInputStream(clientControllerSocket.getInputStream());
         			clientControllerSocket.setKeepAlive(true);
-        			setControllerOnline(true);
+        			controllerOnline = true;
+        			Log.i("Control", "Controller stabliesh");
             	} catch (IOException e) {
         			e.printStackTrace();
-        			setControllerOnline(false);
+        			controllerOnline = false;
         		} 
             }
         };
@@ -228,21 +230,21 @@ public class ServerTCP {
 			reconnect = true;
 		
 		while (!requestCompleted && requestNumber++ < 100){ //100 tries
-			Log.i(TAG, "Sending Data to server...");
+			Log.i(TAG, "Getting Controller from server...");
 			try {
 				
 				if(reconnect){
 					
 					if(clientControllerSocket!=null && !clientControllerSocket.isClosed())
 						clientControllerSocket.close();
-					Log.e(TAG, "Client disconnected, connecting...");
+					Log.e(TAG, "Controller disconnected, connecting...");
 					clientControllerSocket = controllerSocket.accept();
 					dataControllerOutput = new DataOutputStream(clientControllerSocket.getOutputStream());
 					dataControllerInput = new DataInputStream(clientControllerSocket.getInputStream());
 					clientControllerSocket.setKeepAlive(true);
 					controllerOnline = true;
 					reconnect = false;
-					Log.i(TAG, "Client connected");
+					Log.i(TAG, "Controller connected");
 				}
 				
 				//Reciving controls
@@ -283,7 +285,7 @@ public class ServerTCP {
 	}
 
 	public String getControls() {
-		controlChanged = false;
+		controlChanged=false;
 		return controls;
 	}
 
@@ -313,6 +315,14 @@ public class ServerTCP {
 
 	public void setTransferingController(boolean isTransferingController) {
 		this.isTransferingController = isTransferingController;
+	}
+
+	public boolean hasControlChanged() {
+		return controlChanged;
+	}
+
+	public void setControlChanged(boolean controlChanged) {
+		this.controlChanged = controlChanged;
 	}
 
 }
