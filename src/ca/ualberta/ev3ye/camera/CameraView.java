@@ -11,7 +11,7 @@ import android.util.AttributeSet;
 
 public class CameraView extends JavaCameraView {
 	
-	private boolean isFlashLightON = false;
+	private boolean isFlashLightON = false; 
 
     public CameraView(Context context, AttributeSet attrs) {
         super(context, attrs);

@@ -88,6 +88,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	private IntentFilter mIntentFilter = null;
 	
 	private BluetoothCom btComm = null;
+	
+	int power=50;
 
     @SuppressLint("ClickableViewAccessibility")
 	private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
@@ -145,7 +147,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         }
         
         btComm = new BluetoothCom(); //TODO
-        btComm.searchForRobot();
+        btComm.startBT(this);
 		serverTCP = new ServerTCP();
 		serverTCP.initGreeting();
 		serverTCP.initStreaming();
@@ -160,17 +162,21 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     @Override
     public void onPause()
     {
+    	if(btComm!=null)
+        	btComm.close();
         super.onPause();
         if(isWiFiDirect)
         	unregisterReceiver( mReceiver );
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
+        
     }
 
     @Override
     public void onResume()
     {
         super.onResume();
+        btComm.searchForRobot();
         if(isWiFiDirect){
         	this.registerReceiver( mReceiver, mIntentFilter );
             mManager.discoverPeers( mChannel, new WifiP2pManager.ActionListener() {
@@ -189,10 +195,12 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 
     public void onDestroy() {
         super.onDestroy();
+        Log.e("TAG", "DESTROY!!!!");
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
         if (serverTCP != null)
         	serverTCP.shutdown();
+        
     }
 
     public void onCameraViewStarted(int width, int height) {
@@ -212,6 +220,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	public boolean onTouch(View v, MotionEvent event) {
 		Log.i(TAG,"onTouch event");
 		mOpenCvCameraView.toggleFlashLight();
+		power=-power;
+			
 		/*
 		//Top-left = (0,0)  User's point
 		float x = event.getX();
@@ -267,6 +277,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         } else if (item == mItemPreviewFeatures) {
             mViewMode = VIEW_MODE_FEATURES;
         } else if (item == mItemStartStreaming) {
+        	btComm.searchForRobot();
         	//clientTCP = new ClientTCP();
         }
         
@@ -302,7 +313,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     	int x = (100-porc)*(mRgba.cols()-width)/100;
     	Rect crop = new Rect(x,0,width,mRgba.rows());
     	
-        if(serverTCP.isClientOnline()){ //Connected to client, stream pics
+        if(serverTCP.isStreamingOnline()){ //Connected to client, stream pics
         	Mat imageCropMat= new Mat(mRgba, crop);
         	
         	Mat imageRotMat = new Mat();
@@ -313,13 +324,11 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
             MatOfByte bufByte = new MatOfByte();
         	Highgui.imencode(".jpg", imageMat, bufByte, compression_params);
         	boolean sent=serverTCP.updateStreaming(bufByte.toArray());
-        	if(!sent)
-        		Log.e(TAG, "Camera is skipping frame....");
         	porc = Integer.parseInt(serverTCP.getControls());
         }
         
         if(btComm.isSuccess()){
-        	btComm.sendCommands("1;50;-50;");
+        	btComm.sendCommands("1;"+power+";"+(-power)+";");
         }
         
         Core.rectangle(mRgba, new Point(x,0),new Point(x+width-1,mRgba.rows()-1), new Scalar(255,0,0,255));

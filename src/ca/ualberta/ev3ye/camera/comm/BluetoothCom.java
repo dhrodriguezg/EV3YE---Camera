@@ -24,12 +24,10 @@ public class BluetoothCom{
 	private BluetoothAdapter btAdapter;
 	private boolean success = false;
 	private boolean reConnect = false;
-	private boolean isTransferingData = true;
-	private BluetoothSocket btSocket;
-	private DataOutputStream dataOut;
-	private DataInputStream dataIn;
-	
-	
+	private boolean isTransferingData = false;
+	private BluetoothSocket btSocket = null;
+	private DataOutputStream dataOut = null;
+	private DataInputStream dataIn = null;
 
 	public BluetoothCom(){
 		
@@ -44,16 +42,20 @@ public class BluetoothCom{
 	}
 	
 	public void searchForRobot(){
-		Set<BluetoothDevice> pairedDevices = btAdapter.getBondedDevices();
-		for (BluetoothDevice device : pairedDevices) {
-			checkLink(device.getName(),device.getAddress());
+		if(robotMac.equals("")){ //It's the first time it runs.
+			Set<BluetoothDevice> pairedDevices = btAdapter.getBondedDevices();
+			for (BluetoothDevice device : pairedDevices) {
+				checkLink(device.getName(),device.getAddress());
+			}
+		}else{
+			checkLink(robotName,robotMac);
 		}
 	}
 	
 	private void checkLink(final String name, final String mac){
 		Thread thread = new Thread() {
             public void run() {
-            	Log.i(TAG, "Connecting to "+mac);
+            	Log.d(TAG, "Connecting to "+mac);
             	try {
             		BluetoothDevice btDevice = btAdapter.getRemoteDevice(mac);
             		BluetoothSocket btSock = btDevice.createRfcommSocketToServiceRecord( UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
@@ -63,9 +65,13 @@ public class BluetoothCom{
             		DataInputStream dIn = new DataInputStream( btSock.getInputStream() );
             		
             		dOut.writeUTF("Are you Robot?");
+            		dOut.flush();
+            		while(dIn.available()==0){//I HAVE to do this, the Smartphone is way faster than the EV3
+            			Thread.sleep(1);
+            		}
             		boolean confirm = dIn.readBoolean();
             		if(confirm){
-            			Log.e(TAG, "Found Robot "+name+" at "+mac);
+            			Log.d(TAG, "Found Robot '"+name+"' at "+mac);
             			robotMac = mac;
             			robotName = name;
             			btSocket = btSock;
@@ -77,7 +83,7 @@ public class BluetoothCom{
             		dOut.close();
             		dIn.close();
             		btSock.close();
-				} catch (IOException e) {
+				} catch (IOException | InterruptedException e) {
 					e.printStackTrace();
 				}
             }
@@ -88,19 +94,22 @@ public class BluetoothCom{
 	public void sendCommands(final String msg){
 		if (isTransferingData)
 			return;
+		Log.d(TAG, "Sending "+msg);
 		Thread thread = new Thread() {
 			public void run() {
 				try {
-					Log.i(TAG, "Sending msg: "+msg);
 					isTransferingData=true;
 					
 					if(reConnect)
 						reconnect();
+					Log.d(TAG, "Writing");
 					dataOut.writeUTF(msg);
+					Log.d(TAG, "Reading");
 					dataIn.readBoolean();
 					isTransferingData=false;
 				} catch (IOException e) {
 					e.printStackTrace();
+					Log.d(TAG, "Error in connection...");
 					reConnect = true;
 				}
 			}
@@ -119,13 +128,22 @@ public class BluetoothCom{
 	}
 	
 	public void close(){
-		try {
-			dataOut.close();
-			dataIn.close();
-			btSocket.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		if(!success)
+			return;
+		
+		Thread thread = new Thread() {
+			public void run() {
+				try {
+					while(isTransferingData)
+						Thread.sleep(1);
+					sendCommands("-1;-1;-1");
+					success=false;
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		thread.start();
 	}
 
 	public boolean isSuccess() {

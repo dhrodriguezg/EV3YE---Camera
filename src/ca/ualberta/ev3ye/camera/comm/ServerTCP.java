@@ -12,26 +12,37 @@ import java.net.Socket;
 public class ServerTCP {
 	
 	private static final String TAG = "ServerTCP";
-	private static final int GREETING_PORT = 5555;
-	private static final int TRANSFER_PORT = 8888;
+	private static final int GREETING_PORT = 7777;
+	private static final int STREAMING_PORT = 8888;
+	private static final int CONTROLLER_PORT = 9999;
     
 	private ServerSocket greetingSocket = null;
-	private ServerSocket transferSocket = null;
+	private ServerSocket streamingSocket = null;
+	private ServerSocket controllerSocket = null;
 	
 	private boolean serverOnline = false;
-	private boolean clientOnline = false;
+	
+    private Socket clientStreamingSocket = null;
+    private DataInputStream dataStreamingInput = null;
+    private DataOutputStream dataStreamingOutput = null;
+    private boolean isTransferingStreaming = false;
+    private boolean streamingOnline = false;
     
-    private Socket clientSocket = null;
-    private DataInputStream dataInput = null;
-    private DataOutputStream dataOutput = null;
-    private boolean isTransferingData = false;
+    private Socket clientControllerSocket = null;
+    private DataInputStream dataControllerInput = null;
+    private DataOutputStream dataControllerOutput = null;
+    private boolean isTransferingController = false;
+    private boolean controllerOnline = false;
+    
     private byte[] picture = null;
     private String controls = "0";
+    private boolean controlChanged = false;
     
 	public ServerTCP(){
 		try {
 			greetingSocket = new ServerSocket(GREETING_PORT);
-			transferSocket = new ServerSocket(TRANSFER_PORT);
+			streamingSocket = new ServerSocket(STREAMING_PORT);
+			controllerSocket = new ServerSocket(CONTROLLER_PORT);
 			serverOnline = true;
             Log.d(TAG,"connected...");
         } catch (IOException e) {
@@ -44,12 +55,14 @@ public class ServerTCP {
 		try {
 			if(!greetingSocket.isClosed())
 				greetingSocket.close();
-			if(!transferSocket.isClosed())
-				transferSocket.close();
+			if(!streamingSocket.isClosed())
+				streamingSocket.close();
+			if(!controllerSocket.isClosed())
+				controllerSocket.close();
 			serverOnline = false;
 		} catch (IOException e) {
 			e.printStackTrace();
-			System.err.println("**** Error shutting down the server: "+TRANSFER_PORT);
+			System.err.println("**** Error shutting down the server: "+STREAMING_PORT);
 		}
 	}
 	
@@ -66,7 +79,6 @@ public class ServerTCP {
                 		String greeting = dataInput.readUTF();
                 		if(greeting.equals("Are you EV3 Camera?")){
                 			dataOutput.writeBoolean(true);
-                			dataOutput.writeUTF("This is a BT device I swear..");
                 		}else{
                 			dataOutput.writeBoolean(false);
                 		}
@@ -85,34 +97,52 @@ public class ServerTCP {
         thread.start();
 	}
 	
+	
 	public void initStreaming(){
 		Thread thread = new Thread() {
             public void run() {
             	try {
-            		clientSocket = transferSocket.accept(); // This is blocking. It will wait.
-            		dataOutput = new DataOutputStream(clientSocket.getOutputStream());
-            		dataInput = new DataInputStream(clientSocket.getInputStream());
-        			clientSocket.setKeepAlive(true);
-        			clientOnline = true;
+            		clientStreamingSocket = streamingSocket.accept(); // This is blocking. It will wait.
+            		dataStreamingOutput = new DataOutputStream(clientStreamingSocket.getOutputStream());
+            		dataStreamingInput = new DataInputStream(clientStreamingSocket.getInputStream());
+        			clientStreamingSocket.setKeepAlive(true);
+        			streamingOnline = true;
             	} catch (IOException e) {
         			e.printStackTrace();
-        			clientOnline = false;
+        			streamingOnline = false;
         		} 
             }
         };
         thread.start();
 	}
 	
+	public void initController(){
+		Thread thread = new Thread() {
+            public void run() {
+            	try {
+            		clientControllerSocket = streamingSocket.accept(); // This is blocking. It will wait.
+            		dataControllerOutput = new DataOutputStream(clientControllerSocket.getOutputStream());
+            		dataControllerInput = new DataInputStream(clientControllerSocket.getInputStream());
+        			clientControllerSocket.setKeepAlive(true);
+        			setControllerOnline(true);
+            	} catch (IOException e) {
+        			e.printStackTrace();
+        			setControllerOnline(false);
+        		} 
+            }
+        };
+        thread.start();
+	}
+	
+	
+	
 	public boolean updateStreaming(byte[] picture){
-		
-		if(isTransferingData)
+		if(isTransferingStreaming)
 			return false; //Cannot send right now, busy.
-		
 		this.picture = picture;
 		Thread thread = new Thread() {
 			public void run() {
 				updateSreaming();
-				updateControls();
 			}
 		};
 		thread.start();
@@ -123,10 +153,10 @@ public class ServerTCP {
 		
 		boolean requestCompleted = false;
 		boolean reconnect = false;
-		isTransferingData = true;
+		isTransferingStreaming = true;
 		int requestNumber = 0;
 		
-		if(clientSocket==null)
+		if(clientStreamingSocket==null)
 			reconnect = true;
 		
 		while (!requestCompleted && requestNumber++ < 100){ //100 tries
@@ -135,47 +165,111 @@ public class ServerTCP {
 				
 				if(reconnect){
 					
-					if(clientSocket!=null && !clientSocket.isClosed())
-						clientSocket.close();
+					if(clientStreamingSocket!=null && !clientStreamingSocket.isClosed())
+						clientStreamingSocket.close();
 					Log.e(TAG, "Client disconnected, connecting...");
-					clientSocket = transferSocket.accept();
-					dataOutput = new DataOutputStream(clientSocket.getOutputStream());
-					dataInput = new DataInputStream(clientSocket.getInputStream());
-					clientSocket.setKeepAlive(true);
-					clientOnline = true;
+					clientStreamingSocket = streamingSocket.accept();
+					dataStreamingOutput = new DataOutputStream(clientStreamingSocket.getOutputStream());
+					dataStreamingInput = new DataInputStream(clientStreamingSocket.getInputStream());
+					clientStreamingSocket.setKeepAlive(true);
+					streamingOnline = true;
 					reconnect = false;
 					Log.i(TAG, "Client connected");
 				}
 				
 				//Transfering picture
-				dataOutput.writeInt(picture.length);
-				dataOutput.write(picture);
-				dataOutput.flush();
+				dataStreamingOutput.writeInt(picture.length);
+				dataStreamingOutput.write(picture);
+				dataStreamingOutput.flush();
 				
 				//Reciving controls
-				while(dataInput.available()==0){ //maybe this device is going too fast, so wait until there is new data...
+				while(dataStreamingInput.available()==0){ //maybe this device is going too fast, so wait until there is new data...
 					Thread.sleep(1);
 				}
-				setControls(dataInput.readUTF());
+				dataStreamingInput.readBoolean(); //receive ACK, just for sync
 				
 				//Data transfer completed
-				requestCompleted = true;				
+				requestCompleted = true;
 				Log.i(TAG, "Data sendt successfully, tries: "+requestNumber);
 			} catch (IOException e) {
 				Log.e(TAG, "Sudden disconnection from the Server °O° ");
 				e.printStackTrace();
 				reconnect = true;
-				clientOnline = false;
+				streamingOnline = false;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
 		}
-		isTransferingData = false;
+		isTransferingStreaming = false;
 		return requestCompleted;
 	}
 	
-	public void updateControls(){
-		// controls send to ev3 and other stuff....
+	public boolean updateControls(){
+		if(isTransferingController)
+			return false; //Cannot send right now, busy.
+		
+		Thread thread = new Thread() {
+			public void run() {
+				updateControls(false);
+			}
+		};
+		thread.start();
+		return true;
+	}
+	
+	public void updateControls(boolean unused){
+		
+		boolean requestCompleted = false;
+		boolean reconnect = false;
+		isTransferingController = true;
+		int requestNumber = 0;
+		
+		if(clientControllerSocket==null)
+			reconnect = true;
+		
+		while (!requestCompleted && requestNumber++ < 100){ //100 tries
+			Log.i(TAG, "Sending Data to server...");
+			try {
+				
+				if(reconnect){
+					
+					if(clientControllerSocket!=null && !clientControllerSocket.isClosed())
+						clientControllerSocket.close();
+					Log.e(TAG, "Client disconnected, connecting...");
+					clientControllerSocket = controllerSocket.accept();
+					dataControllerOutput = new DataOutputStream(clientControllerSocket.getOutputStream());
+					dataControllerInput = new DataInputStream(clientControllerSocket.getInputStream());
+					clientControllerSocket.setKeepAlive(true);
+					controllerOnline = true;
+					reconnect = false;
+					Log.i(TAG, "Client connected");
+				}
+				
+				//Reciving controls
+				while(dataControllerInput.available()==0){ //maybe this device is going too fast, so wait until there is new data...
+					Thread.sleep(1);
+				}
+				controls=dataControllerInput.readUTF();
+				
+				//Sending ACK
+				dataControllerOutput.writeBoolean(true);
+				dataControllerOutput.flush();
+				
+				//Data transfer completed
+				requestCompleted = true;
+				controlChanged = true;
+				Log.i(TAG, "Controller received successfully, tries: "+requestNumber);
+			} catch (IOException e) {
+				Log.e(TAG, "Sudden disconnection from the Controller client °O° ");
+				e.printStackTrace();
+				reconnect = true;
+				controllerOnline = false;
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		isTransferingController = false;
+	//	return requestCompleted;
 	}
 	
 	
@@ -189,6 +283,7 @@ public class ServerTCP {
 	}
 
 	public String getControls() {
+		controlChanged = false;
 		return controls;
 	}
 
@@ -196,12 +291,28 @@ public class ServerTCP {
 		this.controls = controls;
 	}
 
-	public boolean isClientOnline() {
-		return clientOnline;
+	public boolean isStreamingOnline() {
+		return streamingOnline;
 	}
 
-	public void setClientOnline(boolean clientOnline) {
-		this.clientOnline = clientOnline;
+	public void setStreamingOnline(boolean clientOnline) {
+		this.streamingOnline = clientOnline;
+	}
+
+	public boolean isControllerOnline() {
+		return controllerOnline;
+	}
+
+	public void setControllerOnline(boolean controllerOnline) {
+		this.controllerOnline = controllerOnline;
+	}
+
+	public boolean isTransferingController() {
+		return isTransferingController;
+	}
+
+	public void setTransferingController(boolean isTransferingController) {
+		this.isTransferingController = isTransferingController;
 	}
 
 }
