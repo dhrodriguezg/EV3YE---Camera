@@ -32,17 +32,31 @@ public class CameraView extends JavaCameraView {
         return mCamera.getParameters().getPreviewSize();
     }
     
-	public void toggleFlashLight() {
-		Parameters params = mCamera.getParameters();
-		if (isFlashLightON) {
-			isFlashLightON = false;
-			params.setFlashMode(Parameters.FLASH_MODE_OFF);
+    public void turnFlashLightOn(SoundPlayer sp){
+    	if(!isFlashLightON){
+    		Parameters params = mCamera.getParameters();
+    		params.setFlashMode(Parameters.FLASH_MODE_TORCH);
 			mCamera.setParameters(params);
-		} else {
-			isFlashLightON = true;
-			params.setFlashMode(Parameters.FLASH_MODE_TORCH);
+			sp.lightOn();
+			isFlashLightON=true;
+    	}
+    }
+    public void turnFlashLightOff(SoundPlayer sp){
+    	if(isFlashLightON){
+    		Parameters params = mCamera.getParameters();
+    		params.setFlashMode(Parameters.FLASH_MODE_OFF);
 			mCamera.setParameters(params);
-		}
+			sp.lightOff();
+			isFlashLightON=false;
+    	}
+    }
+    
+	public void toggleFlashLight(SoundPlayer sp) { 
+		if (isFlashLightON)
+			turnFlashLightOff(sp);
+		else
+			turnFlashLightOn(sp);
+		
 	}
 	
 }

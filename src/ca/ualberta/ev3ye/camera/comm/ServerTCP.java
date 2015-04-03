@@ -38,31 +38,17 @@ public class ServerTCP {
     private String controls = "";
     private boolean controlChanged = false;
     
+    private long startingTime = 0;
+    
 	public ServerTCP(){
 		try {
 			greetingSocket = new ServerSocket(GREETING_PORT);
 			streamingSocket = new ServerSocket(STREAMING_PORT);
 			controllerSocket = new ServerSocket(CONTROLLER_PORT);
 			serverOnline = true;
-            Log.d(TAG,"connected...");
         } catch (IOException e) {
 			serverOnline = false;
 			e.printStackTrace();
-		}
-	}
-	
-	public void shutdown(){
-		try {
-			if(!greetingSocket.isClosed())
-				greetingSocket.close();
-			if(!streamingSocket.isClosed())
-				streamingSocket.close();
-			if(!controllerSocket.isClosed())
-				controllerSocket.close();
-			serverOnline = false;
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.err.println("**** Error shutting down the server: "+STREAMING_PORT);
 		}
 	}
 	
@@ -102,11 +88,13 @@ public class ServerTCP {
 		Thread thread = new Thread() {
             public void run() {
             	try {
+            		Log.i("Control", "Waiting to Stream");
             		clientStreamingSocket = streamingSocket.accept(); // This is blocking. It will wait.
             		dataStreamingOutput = new DataOutputStream(clientStreamingSocket.getOutputStream());
             		dataStreamingInput = new DataInputStream(clientStreamingSocket.getInputStream());
         			clientStreamingSocket.setKeepAlive(true);
         			streamingOnline = true;
+        			checkConnection(true);
             	} catch (IOException e) {
         			e.printStackTrace();
         			streamingOnline = false;
@@ -126,7 +114,6 @@ public class ServerTCP {
             		dataControllerInput = new DataInputStream(clientControllerSocket.getInputStream());
         			clientControllerSocket.setKeepAlive(true);
         			controllerOnline = true;
-        			Log.i("Control", "Controller stabliesh");
             	} catch (IOException e) {
         			e.printStackTrace();
         			controllerOnline = false;
@@ -162,7 +149,6 @@ public class ServerTCP {
 			reconnect = true;
 		
 		while (!requestCompleted && requestNumber++ < 100){ //100 tries
-			Log.i(TAG, "Sending Data to server...");
 			try {
 				
 				if(reconnect){
@@ -178,6 +164,7 @@ public class ServerTCP {
 					reconnect = false;
 					Log.i(TAG, "Client connected");
 				}
+				startingTime = System.currentTimeMillis();
 				
 				//Transfering picture
 				dataStreamingOutput.writeInt(picture.length);
@@ -192,7 +179,6 @@ public class ServerTCP {
 				
 				//Data transfer completed
 				requestCompleted = true;
-				Log.i(TAG, "Data sendt successfully, tries: "+requestNumber);
 			} catch (IOException e) {
 				Log.e(TAG, "Sudden disconnection from the Server °O° ");
 				e.printStackTrace();
@@ -220,7 +206,6 @@ public class ServerTCP {
 	}
 	
 	public void updateControls(boolean unused){
-		
 		boolean requestCompleted = false;
 		boolean reconnect = false;
 		isTransferingController = true;
@@ -230,11 +215,8 @@ public class ServerTCP {
 			reconnect = true;
 		
 		while (!requestCompleted && requestNumber++ < 100){ //100 tries
-			Log.i(TAG, "Getting Controller from server...");
 			try {
-				
 				if(reconnect){
-					
 					if(clientControllerSocket!=null && !clientControllerSocket.isClosed())
 						clientControllerSocket.close();
 					Log.e(TAG, "Controller disconnected, connecting...");
@@ -244,7 +226,6 @@ public class ServerTCP {
 					clientControllerSocket.setKeepAlive(true);
 					controllerOnline = true;
 					reconnect = false;
-					Log.i(TAG, "Controller connected");
 				}
 				
 				//Reciving controls
@@ -260,7 +241,6 @@ public class ServerTCP {
 				//Data transfer completed
 				requestCompleted = true;
 				controlChanged = true;
-				Log.i(TAG, "Controller received successfully, tries: "+requestNumber);
 			} catch (IOException e) {
 				Log.e(TAG, "Sudden disconnection from the Controller client °O° ");
 				e.printStackTrace();
@@ -273,6 +253,53 @@ public class ServerTCP {
 		isTransferingController = false;
 	//	return requestCompleted;
 	}
+	
+	private void checkConnection(final boolean keepChecking){
+		Thread thread = new Thread() {
+			public void run() {
+				while(keepChecking){
+					try {
+						Thread.sleep(500);
+						if(System.currentTimeMillis()-startingTime > 1000){
+							if(streamingOnline)
+								resetStreaming();
+						}
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		};
+		thread.start();
+		
+	}
+	
+	private void resetStreaming(){
+		try {
+			if(!clientControllerSocket.isClosed())
+				clientControllerSocket.close();
+			if(!clientStreamingSocket.isClosed())
+				clientStreamingSocket.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void shutdown(){
+		try {
+			if(!greetingSocket.isClosed())
+				greetingSocket.close();
+			if(!streamingSocket.isClosed())
+				streamingSocket.close();
+			if(!controllerSocket.isClosed())
+				controllerSocket.close();
+			serverOnline = false;
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.err.println("**** Error shutting down the server: "+STREAMING_PORT);
+		}
+	}
+	
 	
 	
 	public boolean isServerOnline() {

@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.UUID;
 
+import ca.ualberta.ev3ye.camera.SoundPlayer;
+
 /**
  * Created by Yuey on 2015-03-18.
  */
@@ -41,18 +43,18 @@ public class BluetoothCom{
 		}
 	}
 	
-	public void searchForRobot(){
+	public void searchForRobot(SoundPlayer sp){
 		if(robotMac.equals("")){ //It's the first time it runs.
 			Set<BluetoothDevice> pairedDevices = btAdapter.getBondedDevices();
 			for (BluetoothDevice device : pairedDevices) {
-				checkLink(device.getName(),device.getAddress());
+				checkLink(device.getName(),device.getAddress(),sp);
 			}
 		}else{
-			checkLink(robotName,robotMac);
+			checkLink(robotName,robotMac,sp);
 		}
 	}
 	
-	private void checkLink(final String name, final String mac){
+	private void checkLink(final String name, final String mac, final SoundPlayer sp){
 		Thread thread = new Thread() {
             public void run() {
             	Log.d(TAG, "Connecting to "+mac);
@@ -78,6 +80,7 @@ public class BluetoothCom{
             			dataOut = dOut;
             			dataIn = dIn;
             			success = true;
+            			sp.ev3Online();
             			return;
             		}
             		dOut.close();

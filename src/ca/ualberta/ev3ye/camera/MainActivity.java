@@ -23,6 +23,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.Camera.Size;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.net.wifi.p2p.WifiP2pManager.Channel;
 import android.os.Bundle;
@@ -45,11 +49,14 @@ import ca.ualberta.ev3ye.camera.comm.BluetoothCom;
 import ca.ualberta.ev3ye.camera.comm.ServerTCP;
 import ca.ualberta.ev3ye.camera.comm.WiFiP2PBroadcastReceiver;
 
-public class MainActivity extends Activity implements CvCameraViewListener2, OnTouchListener, WiFiP2PBroadcastReceiver.WiFiP2PBroadcastCallbacks {
+public class MainActivity extends Activity implements CvCameraViewListener2, OnTouchListener, SensorEventListener, WiFiP2PBroadcastReceiver.WiFiP2PBroadcastCallbacks {
 	
     private static final String    TAG = "MainActivity";
     private static final int       VIEW_MODE_RGBA     = 0;
     private static final int       VIEW_MODE_FEATURES = 1;
+    
+    private SoundPlayer sound = null;
+    
     
     private int desiredWidth = 800; //1280-800-320
     private int desiredHeight = 450; //720-450-240
@@ -88,8 +95,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	private IntentFilter mIntentFilter = null;
 	
 	private BluetoothCom btComm = null;
-	
-	int power=50;
+	private SensorManager mSensorManager;
+	private Sensor mPressure;
 
     @SuppressLint("ClickableViewAccessibility")
 	private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
@@ -158,6 +165,12 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         mOpenCvCameraView = (CameraView) findViewById(R.id.tutorial2_activity_surface_view);
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
+        
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        mPressure = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        //mPressure = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+        
+        sound = new SoundPlayer(getApplicationContext());
     }
 
     @Override
@@ -170,14 +183,15 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         	unregisterReceiver( mReceiver );
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
-        
+        mSensorManager.unregisterListener(this);
+        sound.cameraOffline();
     }
 
     @Override
     public void onResume()
     {
         super.onResume();
-        btComm.searchForRobot();
+        btComm.searchForRobot(sound);
         if(isWiFiDirect){
         	this.registerReceiver( mReceiver, mIntentFilter );
             mManager.discoverPeers( mChannel, new WifiP2pManager.ActionListener() {
@@ -190,18 +204,16 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
             });
         }
         
-        
+        mSensorManager.registerListener(this, mPressure, SensorManager.SENSOR_DELAY_NORMAL);
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_3, this, mLoaderCallback);
     }
 
     public void onDestroy() {
         super.onDestroy();
-        Log.e("TAG", "DESTROY!!!!");
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
         if (serverTCP != null)
         	serverTCP.shutdown();
-        
     }
 
     public void onCameraViewStarted(int width, int height) {
@@ -220,32 +232,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	@Override
 	public boolean onTouch(View v, MotionEvent event) {
 		Log.i(TAG,"onTouch event");
-		mOpenCvCameraView.toggleFlashLight();
-		power=-power;
-			
-		/*
-		//Top-left = (0,0)  User's point
-		float x = event.getX();
-		float y = event.getY();
-		//Log.i(TAG, "X="+x+" Y="+y);
-		
-		//Screen Resolution
-		Display display = getWindowManager().getDefaultDisplay();
-		android.graphics.Point size = new android.graphics.Point();
-		display.getSize(size);
-		float widthS = size.x;
-		float heightS = size.y;
-		//Log.i(TAG, "XS="+widthS+" YS="+heightS);
-		
-		//Image Resolution
-		float heightI = mOpenCvCameraView.getResolution().height;
-		float widthI = mOpenCvCameraView.getResolution().width;
-		//Log.i(TAG, "XI="+widthI+" YI="+heightI);
-		
-		xpoint =(int) (x*widthI/widthS);
-		ypoint = (int) (y*heightI/heightS);
-		//Log.i(TAG, "XP="+xpoint+" YP="+ypoint);
-		*/
+		mOpenCvCameraView.toggleFlashLight(sound);
         return false;
 	}
     
@@ -278,7 +265,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         } else if (item == mItemPreviewFeatures) {
             mViewMode = VIEW_MODE_FEATURES;
         } else if (item == mItemStartStreaming) {
-        	btComm.searchForRobot();
+        	btComm.searchForRobot(sound);
         }
         
         else if (item.getGroupId() == 1){//Change Resolution
@@ -343,15 +330,14 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 						e.printStackTrace();
 					}
 				}
-				
 				setNearestResolution(desiredWidth,desiredHeight);
+				sound.cameraOnline();
 			}
 		};
 		thread.start();
 	}
     
     private void updateControls(){
-    	final String TAG = "Control";
     	Thread thread = new Thread() {
 			public void run() {
 				while(!serverTCP.isControllerOnline()){ //Waiting until controller connection is made
@@ -361,12 +347,10 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 						e.printStackTrace();
 					}
 				}
-				Log.i(TAG, "Controller connected");
 				while(serverTCP.isControllerOnline()){
 					
 					try {
 						Thread.sleep(10); //100FPS
-						Log.i(TAG, "Updating controller");
 						serverTCP.updateControls();
 						
 						while(!serverTCP.hasControlChanged()){//Wait until is has finished reading...
@@ -376,7 +360,6 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 								e.printStackTrace();
 							}
 						}
-						Log.i(TAG, "Controller updated");
 						if(serverTCP.hasControlChanged()){
 							//:operator;leftPower;rightPower;cameraHeight
 							String[] control = serverTCP.getControls().split(":");
@@ -427,4 +410,26 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	@Override
 	public void onP2pThisDeviceChanged(Context context, Intent intent) {
 	}
+
+	@Override
+	public void onSensorChanged(SensorEvent event) {
+		//Log.e(TAG,"something changed");
+		if(event.sensor.getType()==Sensor.TYPE_LIGHT){
+			float light = event.values[0];
+			/*if (light<30){
+				mOpenCvCameraView.turnFlashLightOn(sound);
+			}else{
+				mOpenCvCameraView.turnFlashLightOff(sound);
+			}*/
+		}else if (event.sensor.getType()==Sensor.TYPE_ACCELEROMETER){
+			if (Math.abs(event.values[1]) < 2)
+				sound.ev3Down();
+		}
+	}
+
+	@Override
+	public void onAccuracyChanged(Sensor sensor, int accuracy) {
+		
+	}
+	
 }
