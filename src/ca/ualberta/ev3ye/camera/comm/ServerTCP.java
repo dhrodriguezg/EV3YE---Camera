@@ -6,6 +6,8 @@ import android.util.Log;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -46,6 +48,14 @@ public class ServerTCP {
 			streamingSocket = new ServerSocket(STREAMING_PORT);
 			controllerSocket = new ServerSocket(CONTROLLER_PORT);
 			serverOnline = true;
+			
+			//server side UDP
+			/*
+			byte[] lMsg = new byte[4096];
+            DatagramPacket packet = new DatagramPacket(lMsg, lMsg.length);
+            DatagramSocket udpSocket = new DatagramSocket(STREAMING_PORT);
+            udpSocket.receive(packet);
+            udpSocket.send(null);*/
         } catch (IOException e) {
 			serverOnline = false;
 			e.printStackTrace();
@@ -259,8 +269,8 @@ public class ServerTCP {
 			public void run() {
 				while(keepChecking){
 					try {
-						Thread.sleep(500);
-						if(System.currentTimeMillis()-startingTime > 1000){
+						Thread.sleep(2000);
+						if(System.currentTimeMillis()-startingTime > 4000){
 							if(streamingOnline)
 								resetStreaming();
 						}
