@@ -78,7 +78,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
     
     private MatOfInt compression_params;
     private List<Size> mResolutionList;
-    private MenuItem[] mResolutionMenuItems;
+    
+	private MenuItem[] mResolutionMenuItems;
     private SubMenu mResolutionMenu;
     
     //private ClientTCP clientTCP = null;
@@ -155,7 +156,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
         
         btComm = new BluetoothCom();
         btComm.startBT(this);
-		serverTCP = new ServerTCP();
+		serverTCP = new ServerTCP(this);
 		serverTCP.initGreeting();
 		serverTCP.initStreaming();
 		serverTCP.initController();
@@ -232,7 +233,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	@Override
 	public boolean onTouch(View v, MotionEvent event) {
 		Log.i(TAG,"onTouch event");
-		mOpenCvCameraView.toggleFlashLight(sound);
+		//mOpenCvCameraView.toggleFlashLight(sound);
         return false;
 	}
     
@@ -364,9 +365,19 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 							//:operator;leftPower;rightPower;cameraHeight
 							String[] control = serverTCP.getControls().split(":");
 							String[] command = control[control.length-1].split(";");
-							porc = Integer.parseInt(command[3]);
-							if(!command[0].equals("4") && btComm.isSuccess()){ //Not visual servoing
+							int operator = Integer.parseInt(command[0]);
+							if(operator<5){
+								porc = Integer.parseInt(command[3]);
+								if(btComm.isSuccess())
 									btComm.sendCommands(control[control.length-1]);
+							}else if(operator==5){ //Resolutions
+								String[] width_height=command[1].split("x");
+								setNearestResolution(Integer.parseInt(width_height[0]), Integer.parseInt(width_height[1]));
+							}else if(operator==6){ //Flash
+								if(command[1].equals("ON"))
+									mOpenCvCameraView.turnFlashLightOn(sound);
+								else if(command[1].equals("OFF"))
+									mOpenCvCameraView.turnFlashLightOff(sound);
 							}
 						}
 					} catch (Exception e) {
@@ -394,6 +405,14 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 		String caption = nearestResolution.width + "x" + nearestResolution.height;
 		Log.i(TAG, "Resolution: "+caption);
     }
+    
+    public List<Size> getmResolutionList() {
+		return mResolutionList;
+	}
+
+	public void setmResolutionList(List<Size> mResolutionList) {
+		this.mResolutionList = mResolutionList;
+	}
 
 	@Override
 	public void onP2pStateChanged(Context context, Intent intent) {
@@ -415,7 +434,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 	public void onSensorChanged(SensorEvent event) {
 		//Log.e(TAG,"something changed");
 		if(event.sensor.getType()==Sensor.TYPE_LIGHT){
-			float light = event.values[0];
+			//float light = event.values[0];
 			/*if (light<30){
 				mOpenCvCameraView.turnFlashLightOn(sound);
 			}else{

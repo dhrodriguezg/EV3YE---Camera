@@ -1,15 +1,17 @@
 package ca.ualberta.ev3ye.camera.comm;
 
 
+import android.hardware.Camera.Size;
 import android.util.Log;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.List;
+
+import ca.ualberta.ev3ye.camera.MainActivity;
 
 public class ServerTCP {
 	
@@ -21,6 +23,8 @@ public class ServerTCP {
 	private ServerSocket greetingSocket = null;
 	private ServerSocket streamingSocket = null;
 	private ServerSocket controllerSocket = null;
+	
+	private MainActivity activity = null;
 	
 	private boolean serverOnline = false;
 	
@@ -42,7 +46,8 @@ public class ServerTCP {
     
     private long startingTime = 0;
     
-	public ServerTCP(){
+	public ServerTCP(MainActivity activity){
+		this.activity=activity;
 		try {
 			greetingSocket = new ServerSocket(GREETING_PORT);
 			streamingSocket = new ServerSocket(STREAMING_PORT);
@@ -102,6 +107,8 @@ public class ServerTCP {
             		clientStreamingSocket = streamingSocket.accept(); // This is blocking. It will wait.
             		dataStreamingOutput = new DataOutputStream(clientStreamingSocket.getOutputStream());
             		dataStreamingInput = new DataInputStream(clientStreamingSocket.getInputStream());
+        			dataStreamingOutput.writeUTF(getResolutions());
+        			dataStreamingOutput.flush();
         			clientStreamingSocket.setKeepAlive(true);
         			streamingOnline = true;
         			checkConnection(true);
@@ -169,6 +176,8 @@ public class ServerTCP {
 					clientStreamingSocket = streamingSocket.accept();
 					dataStreamingOutput = new DataOutputStream(clientStreamingSocket.getOutputStream());
 					dataStreamingInput = new DataInputStream(clientStreamingSocket.getInputStream());
+					dataStreamingOutput.writeUTF(getResolutions());
+        			dataStreamingOutput.flush();
 					clientStreamingSocket.setKeepAlive(true);
 					streamingOnline = true;
 					reconnect = false;
@@ -310,6 +319,15 @@ public class ServerTCP {
 		}
 	}
 	
+	public String getResolutions(){
+		List<Size> resolutions = activity.getmResolutionList();
+        String resolution = "";
+        for(int idx = 0;idx<resolutions.size();idx++) {
+            Size element = resolutions.get(idx);
+            resolution = resolution + element.width + "x" + element.height +":";
+        }
+        return resolution;
+	}
 	
 	
 	public boolean isServerOnline() {
