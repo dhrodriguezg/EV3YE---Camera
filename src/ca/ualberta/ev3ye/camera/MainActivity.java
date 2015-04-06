@@ -442,7 +442,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2, OnT
 			}*/
 		}else if (event.sensor.getType()==Sensor.TYPE_ACCELEROMETER){
 			if (Math.abs(event.values[1]) < 2)
-				sound.ev3Down();
+				sound.ev3Down2();
 		}
 	}
 

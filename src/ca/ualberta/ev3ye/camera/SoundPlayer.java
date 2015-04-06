@@ -14,6 +14,7 @@ public class SoundPlayer {
 	private MediaPlayer mediaEV3Online = null;
 	private MediaPlayer mediaEV3Offline = null;
 	private MediaPlayer mediaEV3Down = null;
+	private MediaPlayer mediaEV3Down2 = null;
 	
 	public SoundPlayer(Context context){
 		
@@ -26,6 +27,7 @@ public class SoundPlayer {
 		mediaEV3Online = MediaPlayer.create(context , R.raw.ev3_online);
 		mediaEV3Offline = MediaPlayer.create(context , R.raw.ev3_offline);
 		mediaEV3Down = MediaPlayer.create(context , R.raw.ev3_down);
+		mediaEV3Down2 = MediaPlayer.create(context , R.raw.ev3_down2);
 	}
 	
 	public void lightOn(){
@@ -63,5 +65,8 @@ public class SoundPlayer {
 	public void ev3Down(){
 		mediaEV3Down.start();
 	}
-
+	
+	public void ev3Down2(){
+		mediaEV3Down2.start();
+	}
 }
